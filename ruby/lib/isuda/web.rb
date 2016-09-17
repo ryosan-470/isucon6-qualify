@@ -91,23 +91,23 @@ module Isuda
 
       def htmlify(content)
         keywords = db.xquery(%| select * from entry order by character_length(keyword) desc |)
-        pattern = ""
-        keywords.each {|k| pattern = "#{Regexp.escape(k[:keyword])}|#{pattern}" }
-        pattern.chop!
-        
-        kw2hash = {}
+        pattern = keywords.map {|k| Regexp.escape(k[:keyword]) }.join('|')
+        hash2kw = {}
         hashed_content = content.gsub(/(#{pattern})/) {|m|
           matched_keyword = $1
           "isuda_#{Digest::SHA1.hexdigest(matched_keyword)}".tap do |hash|
-            kw2hash[matched_keyword] = hash
+            hash2kw[hash] = matched_keyword
           end
         }
+
         escaped_content = Rack::Utils.escape_html(hashed_content)
-        kw2hash.each do |(keyword, hash)|
+        escaped_content.gsub!(/(isuda_[0-9a-z]{40})/) do |m|
+          hash = $1
+          keyword = hash2kw[hash]
           keyword_url = url("/keyword/#{Rack::Utils.escape_path(keyword)}")
-          anchor = '<a href="%s">%s</a>' % [keyword_url, Rack::Utils.escape_html(keyword)]
-          escaped_content.gsub!(hash, anchor)
+          '<a href="%s">%s</a>' % [keyword_url, Rack::Utils.escape_html(keyword)]
         end
+
         escaped_content.gsub(/\n/, "<br />\n")
       end
 
