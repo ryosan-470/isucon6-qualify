@@ -9,6 +9,7 @@ require 'mysql2-cs-bind'
 require 'rack/utils'
 require 'sinatra/base'
 require 'tilt/erubis'
+require 'securerandom'
 
 module Isuda
   class Web < ::Sinatra::Base
@@ -34,7 +35,7 @@ module Isuda
       condition {
         user_id = session[:user_id]
         if user_id
-          user = db.xquery(%| select name from user where id = ? |, user_id).first
+          user = db.xquery(%| select name from user where id = ? limit 1|, user_id).first
           @user_id = user_id
           @user_name = user[:name]
           halt(403) unless @user_name
@@ -67,8 +68,7 @@ module Isuda
       end
 
       def register(name, pw)
-        chars = [*'A'..'~']
-        salt = 1.upto(20).map { chars.sample }.join('')
+        salt = SecureRandom.hex[0...20]
         salted_password = encode_with_salt(password: pw, salt: salt)
         db.xquery(%|
           INSERT INTO user (name, salt, password, created_at)
@@ -91,7 +91,10 @@ module Isuda
 
       def htmlify(content)
         keywords = db.xquery(%| select * from entry order by character_length(keyword) desc |)
-        pattern = keywords.map {|k| Regexp.escape(k[:keyword]) }.join('|')
+        pattern = ""
+        keywords.each {|k| pattern = "#{Regexp.escape(k[:keyword])}|#{pattern}" }
+        pattern.chop!
+        
         kw2hash = {}
         hashed_content = content.gsub(/(#{pattern})/) {|m|
           matched_keyword = $1
@@ -195,7 +198,7 @@ module Isuda
 
     post '/login' do
       name = params[:name]
-      user = db.xquery(%| select * from user where name = ? |, name).first
+      user = db.xquery(%| select * from user where name = ? limit 1|, name).first
       halt(403) unless user
       halt(403) unless user[:password] == encode_with_salt(password: params[:password], salt: user[:salt])
 
@@ -229,7 +232,7 @@ module Isuda
     get '/keyword/:keyword', set_name: true do
       keyword = params[:keyword] or halt(400)
 
-      entry = db.xquery(%| select * from entry where keyword = ? |, keyword).first or halt(404)
+      entry = db.xquery(%| select * from entry where keyword = ? limit 1|, keyword).first or halt(404)
       entry[:stars] = load_stars(entry[:keyword])
       entry[:html] = htmlify(entry[:description])
 
@@ -243,7 +246,7 @@ module Isuda
       keyword = params[:keyword] or halt(400)
       is_delete = params[:delete] or halt(400)
 
-      unless db.xquery(%| SELECT * FROM entry WHERE keyword = ? |, keyword).first
+      unless db.xquery(%| SELECT * FROM entry WHERE keyword = ? limit 1|, keyword).first
         halt(404)
       end
 
