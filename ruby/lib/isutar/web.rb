@@ -56,7 +56,7 @@ module Isutar
 
       # {"id":21,"keyword":"菅山かおる","user_name":"lushe","created_at":"2016-09-17 13:06:25 +0900"}
       str = JSON.dump({keyword: keyword, user_name: user_name, created_at: Time.now})
-      redis.rpush(keyword, )
+      redis.rpush(keyword, str)
 
       content_type :json
       body '{"result" : "ok"}'
