@@ -6,14 +6,18 @@ require 'mysql2'
 require 'mysql2-cs-bind'
 require 'rack/utils'
 require 'sinatra/base'
+require 'redis'
+
 
 module Isutar
   class Web < ::Sinatra::Base
+    redis = Redis.new(:host => "localhost", :port => 6379)
+
     enable :protection
 
-    set :db_user, ENV['ISUTAR_DB_USER'] || 'root'
-    set :db_password, ENV['ISUTAR_DB_PASSWORD'] || ''
-    set :dsn, ENV['ISUTAR_DSN'] || 'dbi:mysql:db=isutar'
+    # set :db_user, ENV['ISUTAR_DB_USER'] || 'root'
+    # set :db_password, ENV['ISUTAR_DB_PASSWORD'] || ''
+    # set :dsn, ENV['ISUTAR_DSN'] || 'dbi:mysql:db=isutar'
     set :isuda_origin, ENV['ISUDA_ORIGIN'] || 'http://localhost:5000'
 
     configure :development do
@@ -23,37 +27,21 @@ module Isutar
     end
 
     helpers do
-      def db
-        Thread.current[:db] ||=
-          begin
-            _, _, attrs_part = settings.dsn.split(':', 3)
-            attrs = Hash[attrs_part.split(';').map {|part| part.split('=', 2) }]
-            mysql = Mysql2::Client.new(
-              username: settings.db_user,
-              password: settings.db_password,
-              database: attrs['db'],
-              encoding: 'utf8mb4',
-              init_command: %|SET SESSION sql_mode='TRADITIONAL,NO_AUTO_VALUE_ON_ZERO,ONLY_FULL_GROUP_BY'|,
-            )
-            mysql.query_options.update(symbolize_keys: true)
-            mysql
-          end
-      end
     end
 
     get '/initialize' do
-      db.xquery('TRUNCATE star')
+      redis.flushall
 
       content_type :json
-      JSON.generate(result: 'ok')
+      body '{"result" : "ok"}'
     end
 
     get '/stars' do
       keyword = params[:keyword] || ''
-      stars = db.xquery(%| select * from star where keyword = ? |, keyword).to_a
+      stars = redis.lrange(keyword, 0, -1).join(',')
 
       content_type :json
-      JSON.generate(stars: stars)
+      body "{\"stars\":[#{stars}]}"
     end
 
     post '/stars' do
@@ -65,13 +53,13 @@ module Isutar
       halt(404) unless Net::HTTPSuccess === res
 
       user_name = params[:user]
-      db.xquery(%|
-        INSERT INTO star (keyword, user_name, created_at)
-        VALUES (?, ?, NOW())
-      |, keyword, user_name)
+
+      # {"id":21,"keyword":"菅山かおる","user_name":"lushe","created_at":"2016-09-17 13:06:25 +0900"}
+      str = JSON.dump({keyword: keyword, user_name: user_name, created_at: Time.now})
+      redis.rpush(keyword, )
 
       content_type :json
-      JSON.generate(result: 'ok')
+      body '{"result" : "ok"}'
     end
   end
 end
