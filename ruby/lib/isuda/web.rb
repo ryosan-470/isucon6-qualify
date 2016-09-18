@@ -90,7 +90,7 @@ module Isuda
       end
 
       def htmlify(content)
-        keywords = db.xquery(%| select * from entry order by character_length(keyword) desc |)
+        keywords = db.xquery(%| select keyword from entry |)
         pattern = keywords.map {|k| Regexp.escape(k[:keyword]) }.join('|')
         hash2kw = {}
         hashed_content = content.gsub(/(#{pattern})/) {|m|
@@ -216,9 +216,9 @@ module Isuda
       keyword = params[:keyword] || ''
       halt(400) if keyword == ''
       description = params[:description]
-      halt(400) if is_spam_content(description) || is_spam_content(keyword)
+      halt(400) if is_spam_content(description + keyword)
 
-      bound = [@user_id, keyword, description] * 2
+      bound = [@user_id, keyword, description, @user_id, keyword, description]
       db.xquery(%|
         INSERT INTO entry (author_id, keyword, description, created_at, updated_at)
         VALUES (?, ?, ?, NOW(), NOW())
